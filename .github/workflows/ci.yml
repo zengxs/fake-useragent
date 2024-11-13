@@ -1,0 +1,14 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container:
+      image: golang:1.23
+    steps:
+      - uses: actions/checkout@v2
+      - name: Run tests
+        run: go test -test.v ./...

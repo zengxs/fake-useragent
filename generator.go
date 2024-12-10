@@ -2,10 +2,9 @@ package fakeuseragent
 
 import (
 	_ "embed"
+	"errors"
 	"math/rand"
 	"time"
-
-	"github.com/goccy/go-yaml"
 )
 
 //go:embed database.yml
@@ -16,51 +15,43 @@ type UserAgentGenerator struct {
 	randSource rand.Source
 }
 
-type Option struct {
-	TagFilters []UserAgentTag
-}
-
-var DefaultOptions = []Option{
-	{
-		TagFilters: []UserAgentTag{
-			TagDesktop,
-			TagWindows,
-		},
-	},
-}
-
-func NewUserAgentGenerator(opts ...Option) (*UserAgentGenerator, error) {
-	if len(opts) == 0 {
-		opts = DefaultOptions
-	}
-
-	var allUserAgents []UserAgent
-	err := yaml.Unmarshal([]byte(defaultUserAgentDBText), &allUserAgents)
+func NewUserAgentGenerator(opts ...OptionSetter) (*UserAgentGenerator, error) {
+	options, err := NewOptions(opts...)
 	if err != nil {
-		return nil, err
+		return nil, errors.Join(ErrNewOptions, err)
 	}
 
 	// filter user agents by tags
-	for _, opt := range opts {
-		if len(opt.TagFilters) == 0 {
-			continue
-		}
-
-		var filteredUserAgents []UserAgent
-		for _, ua := range allUserAgents {
-			for _, tag := range opt.TagFilters {
-				if ua.HasTag(tag) {
+	var filteredUserAgents []UserAgent
+	if len(options.TagFilters) > 0 {
+		for _, ua := range options.Database {
+			if options.FilterMode == FilterModeInclude {
+				for _, tag := range options.TagFilters {
+					if ua.HasTag(tag) {
+						filteredUserAgents = append(filteredUserAgents, ua)
+						break
+					}
+				}
+			} else {
+				// FilterModeExclude
+				hasTag := false
+				for _, tag := range options.TagFilters {
+					if ua.HasTag(tag) {
+						hasTag = true
+						break
+					}
+				}
+				if !hasTag {
 					filteredUserAgents = append(filteredUserAgents, ua)
-					break
 				}
 			}
 		}
-
-		allUserAgents = filteredUserAgents
+	} else {
+		filteredUserAgents = options.Database
 	}
 
 	gen := &UserAgentGenerator{
-		database:   allUserAgents,
+		database:   filteredUserAgents,
 		randSource: rand.NewSource(time.Now().UnixNano()),
 	}
 
